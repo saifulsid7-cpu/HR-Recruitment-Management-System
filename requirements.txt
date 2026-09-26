@@ -1,0 +1,10 @@
+streamlit
+pypdf
+python-docx
+pandas
+numpy
+Pillow
+scikit-learn
+sentence-transformers
+torch
+torchvision
