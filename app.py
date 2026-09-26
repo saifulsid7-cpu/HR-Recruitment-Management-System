@@ -106,13 +106,12 @@ def calculate_semantic_similarity(text1, text2):
     )
 
     return score
+
 # ==========================================
 # JD CATEGORY EXTRACTION
 # ==========================================
 
 def extract_jd_categories(jd_text):
-
-    jd_lower = jd_text.lower()
 
     categories = {
         "education": "",
@@ -122,9 +121,23 @@ def extract_jd_categories(jd_text):
         "rmg_denim": ""
     }
 
-    lines = jd_text.splitlines()
+    if not jd_text:
+        return categories
 
-    current_category = None
+    # --------------------------------------
+    # NORMALIZE JD TEXT
+    # --------------------------------------
+
+    text = jd_text.replace("\r\n", "\n")
+    text = text.replace("\r", "\n")
+
+    lines = text.splitlines()
+
+    # --------------------------------------
+    # SECTION CONTROL
+    # --------------------------------------
+
+    current_section = None
 
     for line in lines:
 
@@ -133,70 +146,389 @@ def extract_jd_categories(jd_text):
         if not clean_line:
             continue
 
-        line_lower = clean_line.lower()
+        # Remove markdown / bullet symbols
+        clean_line = clean_line.lstrip(
+            ">*•●▪◦➢➤✓✔-"
+        ).strip()
 
-        # Education
-        if any(word in line_lower for word in [
-            "education",
-            "educational qualification",
-            "academic qualification"
-        ]):
-
-            current_category = "education"
+        if not clean_line:
             continue
 
-        # Experience
-        elif any(word in line_lower for word in [
-            "experience",
-            "years of experience"
-        ]):
+        lower_line = clean_line.lower()
 
-            current_category = "experience"
+        # ==================================
+        # STANDARD RESPONSIBILITY HEADING
+        # ==================================
+
+        if (
+            "job/key responsibilities" in lower_line
+            or "job / key responsibilities" in lower_line
+            or "job responsibilities" in lower_line
+            or "key responsibilities" in lower_line
+            or "job responsibility" in lower_line
+            or "responsibilities" in lower_line
+            or "major responsibilities" in lower_line
+        ):
+
+            current_section = "responsibilities"
             continue
 
-        # Skills
-        elif any(word in line_lower for word in [
-            "skill",
-            "skills",
-            "technical skill",
-            "competency"
-        ]):
+        # ==================================
+        # STANDARD REQUIREMENTS HEADING
+        # ==================================
 
-            current_category = "skills"
+        if (
+            lower_line.startswith("requirements")
+            or lower_line == "requirement"
+            or lower_line.startswith("job requirements")
+            or lower_line.startswith("qualification")
+            or lower_line.startswith("qualifications")
+        ):
+
+            current_section = "requirements"
             continue
 
-        # Responsibilities
-        elif any(word in line_lower for word in [
-            "responsibility",
-            "responsibilities",
-            "job description",
-            "major task",
-            "duties"
-        ]):
+        # ==================================
+        # OTHER POSSIBLE HEADINGS
+        # ==================================
 
-            current_category = "responsibilities"
+        if (
+            "education" in lower_line
+            or "educational qualification" in lower_line
+            or "academic qualification" in lower_line
+        ) and len(clean_line) < 100:
+
+            current_section = "education"
             continue
 
-        # RMG / Denim
-        elif any(word in line_lower for word in [
-            "rmg",
-            "garments",
-            "denim",
-            "apparel",
-            "woven",
-            "knit"
-        ]):
+        if (
+            "experience" in lower_line
+            and len(clean_line) < 100
+        ):
 
-            current_category = "rmg_denim"
+            current_section = "experience"
+            continue
 
-        # Add line to current category
-        if current_category:
+        if (
+            lower_line == "skills"
+            or lower_line.startswith("skills:")
+            or lower_line == "technical skills"
+            or lower_line.startswith("technical skills:")
+        ):
 
-            categories[current_category] += (
+            current_section = "skills"
+            continue
+
+        # ==================================
+        # REMOVE NUMBERING
+        # ==================================
+
+        clean_line = re.sub(
+            r"^\s*\d+\s*[\.\)\:\-]\s*",
+            "",
+            clean_line
+        ).strip()
+
+        # ==================================
+        # JOB RESPONSIBILITIES SECTION
+        # ==================================
+
+        if current_section == "responsibilities":
+
+            if len(clean_line) >= 8:
+
+                categories["responsibilities"] += (
+                    clean_line + " "
+                )
+
+            continue
+
+        # ==================================
+        # REQUIREMENTS SECTION
+        # ==================================
+
+        if current_section == "requirements":
+
+            lower_clean = clean_line.lower()
+
+            # --------------------------------
+            # EDUCATION
+            # --------------------------------
+
+            if any(keyword in lower_clean for keyword in [
+                "bachelor",
+                "master",
+                "degree",
+                "diploma",
+                "university",
+                "education",
+                "educational"
+            ]):
+
+                categories["education"] += (
+                    clean_line + " "
+                )
+
+            # --------------------------------
+            # EXPERIENCE
+            # --------------------------------
+
+            if (
+                "year" in lower_clean
+                or "years" in lower_clean
+                or "experience" in lower_clean
+                or "experienced" in lower_clean
+            ):
+
+                categories["experience"] += (
+                    clean_line + " "
+                )
+
+            # --------------------------------
+            # SKILLS / KNOWLEDGE
+            # --------------------------------
+
+            if any(keyword in lower_clean for keyword in [
+                "skill",
+                "skills",
+                "knowledge",
+                "erp",
+                "plm",
+                "software",
+                "communication",
+                "coordination",
+                "analytical",
+                "leadership",
+                "negotiation",
+                "planning",
+                "problem solving",
+                "problem-solving",
+                "teamwork",
+                "team work",
+                "buyer",
+                "costing",
+                "follow-up",
+                "follow up"
+            ]):
+
+                categories["skills"] += (
+                    clean_line + " "
+                )
+
+            continue
+
+        # ==================================
+        # EXPLICIT EDUCATION SECTION
+        # ==================================
+
+        if current_section == "education":
+
+            categories["education"] += (
                 clean_line + " "
             )
 
+            continue
+
+        # ==================================
+        # EXPLICIT EXPERIENCE SECTION
+        # ==================================
+
+        if current_section == "experience":
+
+            categories["experience"] += (
+                clean_line + " "
+            )
+
+            continue
+
+        # ==================================
+        # EXPLICIT SKILLS SECTION
+        # ==================================
+
+        if current_section == "skills":
+
+            categories["skills"] += (
+                clean_line + " "
+            )
+
+            continue
+
+    # ======================================
+    # FALLBACK EDUCATION EXTRACTION
+    # ======================================
+
+    if not categories["education"]:
+
+        education_lines = []
+
+        for line in lines:
+
+            lower_line = line.lower()
+
+            if any(keyword in lower_line for keyword in [
+                "bachelor",
+                "master",
+                "degree",
+                "diploma",
+                "university"
+            ]):
+
+                clean_line = line.strip()
+
+                if clean_line:
+
+                    education_lines.append(
+                        clean_line
+                    )
+
+        categories["education"] = " ".join(
+            education_lines
+        )
+
+    # ======================================
+    # FALLBACK EXPERIENCE EXTRACTION
+    # ======================================
+
+    if not categories["experience"]:
+
+        experience_lines = []
+
+        for line in lines:
+
+            lower_line = line.lower()
+
+            if (
+                "experience" in lower_line
+                or re.search(
+                    r"\b\d+\s*[-–]?\s*\d*\s*years?\b",
+                    lower_line
+                )
+            ):
+
+                clean_line = line.strip()
+
+                if clean_line:
+
+                    experience_lines.append(
+                        clean_line
+                    )
+
+        categories["experience"] = " ".join(
+            experience_lines
+        )
+
+    # ======================================
+    # FALLBACK SKILLS EXTRACTION
+    # ======================================
+
+    if not categories["skills"]:
+
+        skill_lines = []
+
+        skill_keywords = [
+            "knowledge",
+            "skill",
+            "erp",
+            "plm",
+            "communication",
+            "coordination",
+            "analytical",
+            "leadership",
+            "negotiation",
+            "planning",
+            "teamwork",
+            "buyer",
+            "costing",
+            "production",
+            "software"
+        ]
+
+        for line in lines:
+
+            lower_line = line.lower()
+
+            if any(
+                keyword in lower_line
+                for keyword in skill_keywords
+            ):
+
+                clean_line = line.strip()
+
+                if clean_line:
+
+                    skill_lines.append(
+                        clean_line
+                    )
+
+        categories["skills"] = " ".join(
+            skill_lines
+        )
+
+    # ======================================
+    # RMG / DENIM / INDUSTRY EXTRACTION
+    # ======================================
+
+    rmg_keywords = [
+        "rmg",
+        "garment",
+        "garments",
+        "apparel",
+        "denim",
+        "woven",
+        "knit",
+        "textile",
+        "fashion",
+        "washing",
+        "merchandising",
+        "production",
+        "factory",
+        "buyer",
+        "buying house"
+    ]
+
+    rmg_lines = []
+
+    for line in lines:
+
+        clean_line = line.strip()
+
+        if not clean_line:
+            continue
+
+        lower_line = clean_line.lower()
+
+        if any(
+            keyword in lower_line
+            for keyword in rmg_keywords
+        ):
+
+            clean_line = clean_line.lstrip(
+                ">*•●▪◦➢➤✓✔-"
+            ).strip()
+
+            if clean_line not in rmg_lines:
+
+                rmg_lines.append(
+                    clean_line
+                )
+
+    categories["rmg_denim"] = " ".join(
+        rmg_lines
+    )
+
+    # ======================================
+    # CLEAN CATEGORY TEXT
+    # ======================================
+
+    for category in categories:
+
+        categories[category] = (
+            categories[category]
+            .strip()
+        )
+
     return categories
+
 
 # ==========================================
 # CATEGORY-WISE AI MATCHING
@@ -204,26 +536,682 @@ def extract_jd_categories(jd_text):
 
 def calculate_category_scores(jd_text, cv_text):
 
-    categories = extract_jd_categories(jd_text)
+    scores = {
+        "education": 0.0,
+        "experience": 0.0,
+        "skills": 0.0,
+        "responsibilities": 0.0,
+        "rmg_denim": 0.0
+    }
 
-    scores = {}
+    if not jd_text or not cv_text:
 
-    for category, category_text in categories.items():
+        return scores
 
-        if category_text.strip():
+    # ======================================
+    # GET JD CATEGORIES
+    # ======================================
 
-            score = calculate_semantic_similarity(
-                category_text,
-                cv_text
+    categories = extract_jd_categories(
+        jd_text
+    )
+
+    # ======================================
+    # PREPARE CV LINES
+    # ======================================
+
+    cv_lines = []
+
+    for line in cv_text.splitlines():
+
+        clean_line = line.strip()
+
+        if not clean_line:
+            continue
+
+        clean_line = clean_line.lstrip(
+            ">*•●▪◦➢➤✓✔-"
+        ).strip()
+
+        if len(clean_line) >= 8:
+
+            cv_lines.append(
+                clean_line
             )
 
-        else:
+    # ======================================
+    # CV FALLBACK
+    # ======================================
 
-            score = 0
+    if len(cv_lines) < 3:
 
-        scores[category] = score
+        cv_lines = re.split(
+            r"[.;]\s+",
+            cv_text
+        )
+
+        cv_lines = [
+            line.strip()
+            for line in cv_lines
+            if len(line.strip()) >= 8
+        ]
+
+    # ======================================
+    # HELPER FUNCTION
+    # ======================================
+
+    def best_category_match(
+        jd_category_text,
+        candidate_lines
+    ):
+
+        if not jd_category_text:
+            return 0.0
+
+        if not candidate_lines:
+            return 0.0
+
+        best_score = 0.0
+
+        # ----------------------------------
+        # BEST CV LINE MATCH
+        # ----------------------------------
+
+        for cv_line in candidate_lines:
+
+            try:
+
+                score = float(
+                    calculate_semantic_similarity(
+                        jd_category_text,
+                        cv_line
+                    )
+                )
+
+                if score > best_score:
+
+                    best_score = score
+
+            except Exception:
+
+                continue
+
+        # ----------------------------------
+        # COMPLETE CV MATCH
+        # ----------------------------------
+
+        try:
+
+            full_score = float(
+                calculate_semantic_similarity(
+                    jd_category_text,
+                    cv_text
+                )
+            )
+
+            if full_score > best_score:
+
+                best_score = full_score
+
+        except Exception:
+
+            pass
+
+        return max(
+            0.0,
+            min(
+                100.0,
+                best_score
+            )
+        )
+
+    # ======================================
+    # EDUCATION
+    # ======================================
+
+    if categories["education"]:
+
+        scores["education"] = round(
+            best_category_match(
+                categories["education"],
+                cv_lines
+            ),
+            2
+        )
+
+    # ======================================
+    # EXPERIENCE
+    # ======================================
+
+    if categories["experience"]:
+
+        scores["experience"] = round(
+            best_category_match(
+                categories["experience"],
+                cv_lines
+            ),
+            2
+        )
+
+    # ======================================
+    # SKILLS
+    # ======================================
+
+    if categories["skills"]:
+
+        scores["skills"] = round(
+            best_category_match(
+                categories["skills"],
+                cv_lines
+            ),
+            2
+        )
+
+    # ======================================
+    # RESPONSIBILITIES
+    # ======================================
+
+    responsibility_text = categories[
+        "responsibilities"
+    ]
+
+    if responsibility_text:
+
+        # ----------------------------------
+        # Split JD into individual tasks
+        # ----------------------------------
+
+        jd_tasks = re.split(
+            r"(?<=[.!?])\s+",
+            responsibility_text
+        )
+
+        jd_tasks = [
+            task.strip()
+            for task in jd_tasks
+            if len(task.strip()) >= 15
+        ]
+
+        # ----------------------------------
+        # If one long block exists,
+        # use comma / semicolon segments
+        # ----------------------------------
+
+        if len(jd_tasks) <= 1:
+
+            jd_tasks = re.split(
+                r"[;,]\s+",
+                responsibility_text
+            )
+
+            jd_tasks = [
+                task.strip()
+                for task in jd_tasks
+                if len(task.strip()) >= 15
+            ]
+
+        if not jd_tasks:
+
+            jd_tasks = [
+                responsibility_text
+            ]
+
+        # ----------------------------------
+        # MATCH EACH JD TASK
+        # ----------------------------------
+
+        task_scores = []
+
+        for jd_task in jd_tasks:
+
+            best_task_score = 0.0
+
+            for cv_line in cv_lines:
+
+                try:
+
+                    score = float(
+                        calculate_semantic_similarity(
+                            jd_task,
+                            cv_line
+                        )
+                    )
+
+                    if score > best_task_score:
+
+                        best_task_score = score
+
+                except Exception:
+
+                    continue
+
+            task_scores.append(
+                best_task_score
+            )
+
+        # ----------------------------------
+        # RESPONSIBILITY FINAL MATCH
+        # ----------------------------------
+
+        if task_scores:
+
+            scores["responsibilities"] = round(
+                (
+                    sum(task_scores)
+                    / len(task_scores)
+                ),
+                2
+            )
+
+    # ======================================
+    # RMG / DENIM
+    # ======================================
+
+    if categories["rmg_denim"]:
+
+        rmg_cv_lines = []
+
+        for line in cv_lines:
+
+            lower_line = line.lower()
+
+            if any(
+                keyword in lower_line
+                for keyword in [
+                    "rmg",
+                    "garment",
+                    "garments",
+                    "apparel",
+                    "denim",
+                    "woven",
+                    "knit",
+                    "textile",
+                    "fashion",
+                    "washing",
+                    "merchandising",
+                    "buyer",
+                    "production"
+                ]
+            ):
+
+                rmg_cv_lines.append(
+                    line
+                )
+
+        if not rmg_cv_lines:
+
+            rmg_cv_lines = cv_lines
+
+        scores["rmg_denim"] = round(
+            best_category_match(
+                categories["rmg_denim"],
+                rmg_cv_lines
+            ),
+            2
+        )
 
     return scores
+    # --------------------------------------
+    # SPLIT JD RESPONSIBILITIES INTO TASKS
+    # --------------------------------------
+
+    jd_lines = responsibility_text.splitlines()
+
+    jd_tasks = []
+
+    for line in jd_lines:
+
+        clean_line = line.strip()
+
+        if not clean_line:
+            continue
+
+        # Remove common bullet / numbering
+        clean_line = clean_line.lstrip(
+            "•-✓✔▪◦➢➤"
+        ).strip()
+
+        clean_line = re.sub(
+            r"^\s*\d+[\.\)\-:]\s*",
+            "",
+            clean_line
+        ).strip()
+
+        if len(clean_line) < 10:
+            continue
+
+        jd_tasks.append(clean_line)
+
+    # --------------------------------------
+    # IF JD RESPONSIBILITIES ARE ONE BLOCK
+    # --------------------------------------
+
+    if len(jd_tasks) <= 1:
+
+        jd_tasks = re.split(
+            r"(?<=[.!?])\s+",
+            responsibility_text
+        )
+
+        jd_tasks = [
+            item.strip()
+            for item in jd_tasks
+            if len(item.strip()) >= 10
+        ]
+
+    # --------------------------------------
+    # CV WORK / RESPONSIBILITY TEXT
+    # --------------------------------------
+
+    cv_lines = cv_text.splitlines()
+
+    cv_tasks = []
+
+    capture_cv = False
+
+    cv_start_keywords = [
+        "work experience",
+        "professional experience",
+        "employment history",
+        "career history",
+        "responsibilities",
+        "job responsibilities",
+        "key responsibilities",
+        "major responsibilities",
+        "roles and responsibilities",
+        "role & responsibilities",
+        "role and responsibilities",
+        "duties",
+        "key duties",
+        "major duties",
+        "job profile"
+    ]
+
+    cv_stop_keywords = [
+        "education",
+        "educational qualification",
+        "academic qualification",
+        "academic background",
+        "skills",
+        "technical skills",
+        "professional skills",
+        "personal information",
+        "personal details",
+        "reference",
+        "references",
+        "training",
+        "trainings",
+        "certification",
+        "certifications",
+        "achievement",
+        "achievements",
+        "language",
+        "languages",
+        "declaration"
+    ]
+
+    task_keywords = [
+        # General HR / Business Tasks
+        "manage",
+        "managed",
+        "handling",
+        "handle",
+        "handled",
+        "coordinate",
+        "coordinated",
+        "follow",
+        "followed",
+        "following",
+        "prepare",
+        "prepared",
+        "maintain",
+        "maintained",
+        "develop",
+        "developed",
+        "support",
+        "supported",
+        "assist",
+        "assisted",
+        "monitor",
+        "monitored",
+        "control",
+        "controlled",
+        "communicate",
+        "communication",
+        "liaise",
+        "liaison",
+        "negotiate",
+        "negotiation",
+        "source",
+        "sourcing",
+        "track",
+        "tracking",
+        "arrange",
+        "arranged",
+        "review",
+        "reviewed",
+        "analyze",
+        "analysis",
+        "process",
+        "processed",
+        "submit",
+        "submitted",
+        "ensure",
+        "plan",
+        "planned",
+        "execute",
+        "executed",
+        "report",
+        "reporting",
+
+        # Merchandising / RMG
+        "buyer",
+        "buying house",
+        "production",
+        "sample",
+        "sampling",
+        "sample development",
+        "costing",
+        "budget",
+        "budgeting",
+        "erp",
+        "tna",
+        "trims",
+        "accessories",
+        "material sourcing",
+        "supplier",
+        "commercial",
+        "merchandising",
+        "order",
+        "shipment",
+        "quality",
+        "wash",
+        "washing",
+        "knitting",
+        "dyeing",
+        "denim",
+        "woven",
+        "garments",
+        "fabric",
+        "lab-dip",
+        "lab dip",
+        "strike-off",
+        "strike off",
+        "tech pack",
+        "purchase",
+        "planning",
+        "follow-up",
+        "follow up",
+        "testing",
+        "compliance"
+    ]
+
+    for line in cv_lines:
+
+        clean_line = line.strip()
+
+        if not clean_line:
+            continue
+
+        lower_line = clean_line.lower()
+
+        # Start CV experience section
+        if any(
+            keyword in lower_line
+            for keyword in cv_start_keywords
+        ):
+
+            capture_cv = True
+            continue
+
+        # Stop at unrelated sections
+        if capture_cv and any(
+            keyword in lower_line
+            for keyword in cv_stop_keywords
+        ):
+
+            capture_cv = False
+            continue
+
+        if not capture_cv:
+            continue
+
+        clean_line = clean_line.lstrip(
+            "•-✓✔▪◦➢➤"
+        ).strip()
+
+        clean_line = re.sub(
+            r"^\s*\d+[\.\)\-:]\s*",
+            "",
+            clean_line
+        ).strip()
+
+        if len(clean_line) < 8:
+            continue
+
+        lower_clean = clean_line.lower()
+
+        # Keep only lines that contain
+        # meaningful work/task evidence
+        if any(
+            keyword in lower_clean
+            for keyword in task_keywords
+        ):
+
+            cv_tasks.append(clean_line)
+
+    # --------------------------------------
+    # REMOVE DUPLICATE CV TASKS
+    # --------------------------------------
+
+    unique_cv_tasks = []
+
+    for task in cv_tasks:
+
+        if task not in unique_cv_tasks:
+
+            unique_cv_tasks.append(task)
+
+    cv_tasks = unique_cv_tasks
+
+    # --------------------------------------
+    # FALLBACK:
+    # IF CV SECTION EXTRACTION IS WEAK
+    # SEARCH ENTIRE CV FOR TASK EVIDENCE
+    # --------------------------------------
+
+    if len(cv_tasks) < 2:
+
+        cv_tasks = []
+
+        for line in cv_lines:
+
+            clean_line = line.strip()
+
+            if len(clean_line) < 8:
+                continue
+
+            clean_line = clean_line.lstrip(
+                "•-✓✔▪◦➢➤"
+            ).strip()
+
+            lower_clean = clean_line.lower()
+
+            if any(
+                keyword in lower_clean
+                for keyword in task_keywords
+            ):
+
+                if clean_line not in cv_tasks:
+
+                    cv_tasks.append(clean_line)
+
+    # --------------------------------------
+    # MATCH JD TASKS WITH CV TASKS
+    # --------------------------------------
+
+    task_scores = []
+
+    for jd_task in jd_tasks:
+
+        best_score = 0.0
+
+        for cv_task in cv_tasks:
+
+            try:
+
+                score = float(
+                    calculate_semantic_similarity(
+                        jd_task,
+                        cv_task
+                    )
+                )
+
+            except Exception:
+
+                score = 0.0
+
+            if score > best_score:
+
+                best_score = score
+
+        task_scores.append(
+            best_score
+        )
+
+    # --------------------------------------
+    # RESPONSIBILITY MATCH SCORE
+    # --------------------------------------
+
+    if task_scores:
+
+        responsibility_score = (
+            sum(task_scores) /
+            len(task_scores)
+        )
+
+    else:
+
+        # Fallback to old category matching
+        responsibility_score = calculate_semantic_similarity(
+            responsibility_text,
+            cv_text
+        )
+
+    scores["responsibilities"] = round(
+        float(responsibility_score),
+        2
+    )
+
+    return scores
+    scores["responsibilities"] = round(
+        float(responsibility_score),
+        2
+    )
+
+    return scores
+
+
 # ==========================================
 # WEIGHTED AI SCORE
 # ==========================================
@@ -238,8 +1226,6 @@ def calculate_weighted_score(category_scores):
         "rmg_denim": 15
     }
 
-    weighted_scores = {}
-
     total_score = 0
 
     for category, weight in weights.items():
@@ -253,15 +1239,9 @@ def calculate_weighted_score(category_scores):
             category_score * weight / 100
         )
 
-        weighted_scores[category] = round(
-            weighted_score,
-            2
-        )
-
         total_score += weighted_score
 
     return round(total_score, 2)
-
 
 # ==========================================
 # JD TASK / RESPONSIBILITY EXTRACTION
@@ -269,9 +1249,54 @@ def calculate_weighted_score(category_scores):
 
 def extract_jd_tasks(jd_text):
 
+    if not jd_text:
+        return []
+
     lines = jd_text.splitlines()
+
     tasks = []
+
     capture = False
+
+    # Sections that usually contain JD responsibilities
+    start_keywords = [
+        "job description",
+        "job responsibilities",
+        "key responsibilities",
+        "major responsibilities",
+        "responsibilities",
+        "roles and responsibilities",
+        "role & responsibilities",
+        "role and responsibilities",
+        "duties",
+        "key duties",
+        "major duties",
+        "experience on",
+        "major tasks",
+        "key tasks"
+    ]
+
+    # Sections that usually come after responsibilities
+    stop_keywords = [
+        "requirements",
+        "additional requirements",
+        "educational qualification",
+        "education qualification",
+        "academic qualification",
+        "academic background",
+        "education",
+        "experience required",
+        "experience",
+        "salary",
+        "benefits",
+        "gender",
+        "location",
+        "job location",
+        "apply",
+        "application",
+        "deadline",
+        "how to apply"
+    ]
 
     for line in lines:
 
@@ -280,172 +1305,83 @@ def extract_jd_tasks(jd_text):
         if not clean_line:
             continue
 
-        clean_line = clean_line.lstrip(
-            "•-✓✔▪◦➢➤"
-        ).strip()
-
-        lower_line = clean_line.lower()
-
-        # Start capturing after responsibility headings
-        if any(keyword in lower_line for keyword in [
-            "experience on",
-            "responsibilities",
-            "job responsibilities",
-            "key responsibilities",
-            "major responsibilities",
-            "job description",
-            "duties",
-            "roles and responsibilities"
-        ]):
-            capture = True
-            continue
-
-        # Stop capturing at other sections
-        if any(keyword in lower_line for keyword in [
-            "educational qualification",
-            "education qualification",
-            "academic qualification",
-            "requirements",
-            "additional requirements",
-            "experience required",
-            "salary",
-            "benefits",
-            "gender",
-            "location",
-            "apply",
-            "deadline"
-        ]):
-            capture = False
-            continue
-
-        if capture:
-
-            if len(clean_line) >= 5:
-                tasks.append(clean_line)
-
-    return tasks
-
-
-# ==========================================
-# CV TASK / RESPONSIBILITY EXTRACTION
-# ==========================================
-
-def extract_cv_tasks(cv_text):
-
-    lines = cv_text.splitlines()
-
-    tasks = []
-
-    capture = False
-
-    for line in lines:
-
-        clean_line = line.strip()
-
-        if not clean_line:
-            continue
-
-        # Remove common bullet symbols
+        # Remove common bullet characters
         clean_line = clean_line.lstrip(
             "•-✓✔▪◦➢➤●○"
         ).strip()
 
-        lower_line = clean_line.lower()
+        if not clean_line:
+            continue
+
+        lower_line = clean_line.lower().strip()
 
         # --------------------------------------
         # START RESPONSIBILITY SECTION
         # --------------------------------------
 
-        if any(keyword in lower_line for keyword in [
-
-            "responsibilities",
-            "job responsibilities",
-            "key responsibilities",
-            "major responsibilities",
-            "roles and responsibilities",
-            "role & responsibilities",
-            "role and responsibility",
-
-            "duties",
-            "key duties",
-            "major duties",
-
-            "job description",
-            "job profile",
-
-            "work responsibilities",
-
-            "professional experience",
-            "professional experiences",
-
-            "work experience",
-            "work experiences",
-
-            "employment history",
-            "career history",
-
-            "experience summary",
-            "career summary"
-
-        ]):
+        if any(
+            keyword in lower_line
+            for keyword in start_keywords
+        ):
 
             capture = True
+
+            # Sometimes the task is on the SAME line
+            # after the heading.
+            for separator in [":", ".", "–", "-"]:
+
+                if separator in clean_line:
+
+                    parts = clean_line.split(
+                        separator,
+                        1
+                    )
+
+                    if len(parts) == 2:
+
+                        possible_task = parts[1].strip()
+
+                        if len(possible_task) >= 10:
+
+                            tasks.append(
+                                possible_task
+                            )
+
+                    break
+
             continue
 
         # --------------------------------------
-        # STOP AT OTHER CV SECTIONS
+        # STOP RESPONSIBILITY SECTION
         # --------------------------------------
 
-        if any(keyword in lower_line for keyword in [
-
-            "educational qualification",
-            "education qualification",
-            "academic qualification",
-            "academic background",
-            "education",
-
-            "technical skills",
-            "professional skills",
-            "skills",
-
-            "personal information",
-            "personal details",
-
-            "reference",
-            "references",
-
-            "training",
-            "trainings",
-
-            "certification",
-            "certifications",
-
-            "achievement",
-            "achievements",
-
-            "language",
-            "languages",
-
-            "career objective",
-            "objective",
-
-            "declaration",
-
-            "contact information",
-            "contact details"
-
-        ]):
+        if any(
+            keyword in lower_line
+            for keyword in stop_keywords
+        ):
 
             capture = False
             continue
 
         # --------------------------------------
-        # COLLECT TASKS
+        # COLLECT JD TASKS
         # --------------------------------------
 
         if capture:
 
-            # Ignore very short lines
+            # Remove numbering:
+            # 1.
+            # 2)
+            # 3 -
+            # etc.
+            import re
+
+            clean_line = re.sub(
+                r"^\s*\d+\s*[\.\)\-:]\s*",
+                "",
+                clean_line
+            ).strip()
+
             if len(clean_line) < 10:
                 continue
 
@@ -455,42 +1391,486 @@ def extract_cv_tasks(cv_text):
 
             tasks.append(clean_line)
 
-    return tasks
+    # --------------------------------------
+    # REMOVE DUPLICATES
+    # --------------------------------------
+
+    unique_tasks = []
+
+    seen = set()
+
+    for task in tasks:
+
+        task_key = task.lower().strip()
+
+        if task_key not in seen:
+
+            seen.add(task_key)
+
+            unique_tasks.append(task)
+
+    return unique_tasks
+
 
 # ==========================================
-# JD TASK ↔ CV TASK MATCHING
+# CV TASK / RESPONSIBILITY EXTRACTION
 # ==========================================
+
+def extract_cv_tasks(cv_text):
+
+    if not cv_text:
+        return []
+
+    lines = cv_text.splitlines()
+
+    tasks = []
+
+    capture = False
+
+    import re
+
+    # --------------------------------------
+    # Sections where work responsibilities
+    # are normally found
+    # --------------------------------------
+
+    start_keywords = [
+
+        "work experience",
+        "work experiences",
+        "professional experience",
+        "professional experiences",
+        "employment history",
+        "career history",
+        "career experience",
+
+        "responsibilities",
+        "job responsibilities",
+        "key responsibilities",
+        "major responsibilities",
+
+        "roles and responsibilities",
+        "role & responsibilities",
+        "role and responsibilities",
+
+        "duties",
+        "key duties",
+        "major duties",
+
+        "job description",
+        "job profile",
+
+        "work responsibilities"
+    ]
+
+    # --------------------------------------
+    # Sections that normally end experience
+    # --------------------------------------
+
+    stop_keywords = [
+
+        "educational qualification",
+        "education qualification",
+        "academic qualification",
+        "academic background",
+        "education",
+
+        "technical skills",
+        "professional skills",
+        "skills",
+        "core skills",
+        "key skills",
+
+        "personal information",
+        "personal details",
+
+        "reference",
+        "references",
+
+        "training",
+        "trainings",
+
+        "certification",
+        "certifications",
+
+        "achievement",
+        "achievements",
+
+        "language",
+        "languages",
+
+        "career objective",
+        "objective",
+
+        "declaration",
+
+        "contact information",
+        "contact details",
+
+        "interests",
+        "interest"
+    ]
+
+    # --------------------------------------
+    # Words that strongly indicate a task
+    # --------------------------------------
+
+    action_words = [
+
+        "manage",
+        "managed",
+        "managing",
+
+        "handle",
+        "handled",
+        "handling",
+
+        "coordinate",
+        "coordinated",
+        "coordinating",
+
+        "follow",
+        "followed",
+        "following",
+
+        "prepare",
+        "prepared",
+        "preparing",
+
+        "maintain",
+        "maintained",
+        "maintaining",
+
+        "develop",
+        "developed",
+        "developing",
+
+        "support",
+        "supported",
+        "supporting",
+
+        "assist",
+        "assisted",
+        "assisting",
+
+        "monitor",
+        "monitored",
+        "monitoring",
+
+        "supervise",
+        "supervised",
+        "supervising",
+
+        "control",
+        "controlled",
+        "controlling",
+
+        "coordinate",
+        "coordinated",
+
+        "communicate",
+        "communicated",
+        "communicating",
+
+        "liaise",
+        "liaised",
+        "liaison",
+
+        "negotiate",
+        "negotiated",
+        "negotiation",
+
+        "source",
+        "sourced",
+        "sourcing",
+
+        "track",
+        "tracked",
+        "tracking",
+
+        "arrange",
+        "arranged",
+        "arranging",
+
+        "review",
+        "reviewed",
+        "reviewing",
+
+        "analyze",
+        "analysed",
+        "analyzed",
+        "analysis",
+
+        "process",
+        "processed",
+        "processing",
+
+        "submit",
+        "submitted",
+        "submitting",
+
+        "ensure",
+        "ensured",
+        "ensuring",
+
+        "plan",
+        "planned",
+        "planning",
+
+        "execute",
+        "executed",
+        "execution",
+
+        "report",
+        "reported",
+        "reporting",
+
+        "liaison",
+
+        "cost",
+        "costing",
+
+        "budget",
+        "budgeting"
+    ]
+
+    for line in lines:
+
+        clean_line = line.strip()
+
+        if not clean_line:
+            continue
+
+        # Remove bullet symbols
+        clean_line = clean_line.lstrip(
+            "•-✓✔▪◦➢➤●○"
+        ).strip()
+
+        if not clean_line:
+            continue
+
+        lower_line = clean_line.lower().strip()
+
+        # --------------------------------------
+        # START EXPERIENCE SECTION
+        # --------------------------------------
+
+        if any(
+            keyword in lower_line
+            for keyword in start_keywords
+        ):
+
+            capture = True
+            continue
+
+        # --------------------------------------
+        # STOP EXPERIENCE SECTION
+        # --------------------------------------
+
+        if any(
+            keyword in lower_line
+            for keyword in stop_keywords
+        ):
+
+            capture = False
+            continue
+
+        if not capture:
+            continue
+
+        # --------------------------------------
+        # Remove dates
+        # --------------------------------------
+
+        if re.search(
+            r"\b(19|20)\d{2}\b",
+            clean_line
+        ):
+
+            # Do not immediately discard the line
+            # because some task lines may contain dates.
+            if len(clean_line) < 35:
+                continue
+
+        # --------------------------------------
+        # Ignore phone/email/web/address lines
+        # --------------------------------------
+
+        if "@" in clean_line:
+            continue
+
+        if "www." in lower_line:
+            continue
+
+        if "http://" in lower_line:
+            continue
+
+        if "https://" in lower_line:
+            continue
+
+        # --------------------------------------
+        # Ignore very short lines
+        # --------------------------------------
+
+        if len(clean_line) < 8:
+            continue
+
+        # --------------------------------------
+        # Remove numbering
+        # --------------------------------------
+
+        clean_line = re.sub(
+            r"^\s*\d+\s*[\.\)\-:]\s*",
+            "",
+            clean_line
+        ).strip()
+
+        # --------------------------------------
+        # Ignore obvious job-title/company lines
+        # --------------------------------------
+
+        if len(clean_line) < 10:
+            continue
+
+        # --------------------------------------
+        # Detect whether line looks like a task
+        # --------------------------------------
+
+        line_is_task = False
+
+        # 1. If it contains an action word
+        for action_word in action_words:
+
+            if re.search(
+                r"\b"
+                + re.escape(action_word)
+                + r"\b",
+                lower_line
+            ):
+
+                line_is_task = True
+                break
+
+        # --------------------------------------
+        # 2. Common merchandising / RMG tasks
+        # --------------------------------------
+
+        task_keywords = [
+
+            "buyer",
+            "buying house",
+            "production",
+            "sample",
+            "costing",
+            "erp",
+            "tna",
+            "trims",
+            "accessories",
+            "material sourcing",
+            "supplier",
+            "commercial",
+            "merchandising",
+            "merchandiser",
+            "order",
+            "shipment",
+            "quality",
+            "wash",
+            "washing",
+            "knitting",
+            "dyeing",
+            "denim",
+            "woven",
+            "garments",
+            "fabric",
+            "lab-dip",
+            "lab dip",
+            "strike-off",
+            "strike off",
+            "tech pack",
+            "purchase",
+            "planning",
+            "follow-up",
+            "follow up",
+            "communication",
+            "negotiation",
+            "budget",
+            "report",
+            "testing",
+            "compliance"
+        ]
+
+        if any(
+            keyword in lower_line
+            for keyword in task_keywords
+        ):
+
+            line_is_task = True
+
+        # --------------------------------------
+        # Add task
+        # --------------------------------------
+
+        if line_is_task:
+
+            tasks.append(
+                clean_line
+            )
+
+    # --------------------------------------
+    # REMOVE DUPLICATES
+    # --------------------------------------
+
+    unique_tasks = []
+
+    seen = set()
+
+    for task in tasks:
+
+        task_key = task.lower().strip()
+
+        if task_key not in seen:
+
+            seen.add(task_key)
+
+            unique_tasks.append(task)
+
+    return unique_tasks
+
+
+# ==========================================
+# JD TASK ↔ CV TASK SEMANTIC MATCHING
+# ==========================================
+
 def calculate_task_matching(jd_text, cv_text):
 
     jd_tasks = extract_jd_tasks(jd_text)
-    cv_tasks = extract_cv_tasks(cv_text)
 
-    st.write("### 🔍 Task Extraction Debug")
-    st.write("JD Tasks:", jd_tasks)
-    st.write("CV Tasks:", cv_tasks)
+    cv_tasks = extract_cv_tasks(cv_text)
+    
+    st.write("### 🔍 TASK DEBUG")
+    st.write("JD TASKS:", jd_tasks)
+    st.write("CV TASKS:", cv_tasks)
 
     results = []
 
-def calculate_task_matching(jd_text, cv_text):
 
-    jd_tasks = extract_jd_tasks(jd_text)
-    cv_tasks = extract_cv_tasks(cv_text)
-
-    results = []
+    # --------------------------------------
+    # If JD tasks are unavailable
+    # --------------------------------------
 
     if not jd_tasks:
+
         return results
 
-    if not cv_tasks:
-        return results
-
+    # --------------------------------------
     # Compare every JD task with CV tasks
+    # --------------------------------------
+
     for jd_task in jd_tasks:
 
         best_score = 0
+
         best_cv_task = ""
-        best_status = "Weak Match"
-        best_icon = "🔴"
 
         for cv_task in cv_tasks:
 
@@ -510,62 +1890,20 @@ def calculate_task_matching(jd_text, cv_text):
             if score > best_score:
 
                 best_score = score
-                best_cv_task = cv_task
-
-                if score >= 70:
-
-                    best_status = "Strong Match"
-                    best_icon = "🟢"
-
-                elif score >= 45:
-
-                    best_status = "Partial Match"
-                    best_icon = "🟡"
-
-                else:
-
-                    best_status = "Weak Match"
-                    best_icon = "🔴"
-
-        results.append({
-            "jd_task": jd_task,
-            "cv_task": best_cv_task,
-            "score": round(best_score, 2),
-            "status": best_status,
-            "icon": best_icon
-        })
-
-    return results
-
-    # --------------------------------------
-    # Compare every JD task with every
-    # CV task
-    # --------------------------------------
-
-    for jd_task in jd_tasks:
-
-        best_score = 0
-
-        best_cv_task = ""
-
-        for cv_task in cv_tasks:
-
-            score = calculate_semantic_similarity(
-                jd_task,
-                cv_task
-            )
-
-            if score > best_score:
-
-                best_score = score
 
                 best_cv_task = cv_task
 
         # ----------------------------------
-        # Determine match status
+        # Determine result status
         # ----------------------------------
 
-        if best_score >= 70:
+        if not best_cv_task:
+
+            status = "No Evidence"
+
+            icon = "🔴"
+
+        elif best_score >= 70:
 
             status = "Strong Match"
 
@@ -579,7 +1917,7 @@ def calculate_task_matching(jd_text, cv_text):
 
         else:
 
-            status = "Weak / No Match"
+            status = "No Evidence"
 
             icon = "🔴"
 
@@ -601,6 +1939,8 @@ def calculate_task_matching(jd_text, cv_text):
         })
 
     return results
+
+
 # ==========================================
 # TASK MATCH PERCENTAGE
 # ==========================================
@@ -615,20 +1955,35 @@ def calculate_task_match_percentage(
 
     total_score = 0
 
+    valid_results = 0
+
     for item in task_results:
 
-        total_score += item["score"]
+        # No Evidence should not falsely
+        # increase the task match percentage
+        if item["status"] == "No Evidence":
+
+            continue
+
+        total_score += float(
+            item.get("score", 0)
+        )
+
+        valid_results += 1
+
+    if valid_results == 0:
+
+        return 0
 
     task_match = (
         total_score /
-        len(task_results)
+        valid_results
     )
 
     return round(
         task_match,
         2
     )
-
 # ==========================================
 # IMPROVED CANDIDATE NAME EXTRACTION
 # ==========================================
@@ -1271,68 +2626,238 @@ def smart_cv_match(jd_text, cv_text):
 
 def analyze_jd_requirements(jd_text, cv_text):
 
-    requirements = re.split(
-        r'[\n\r]+|[•●▪◦➢➤\-]+',
-        jd_text
-    )
+    if not jd_text or not cv_text:
+        return []
 
-    requirements = [
-        req.strip()
-        for req in requirements
-        if req.strip()
-    ]
+    # --------------------------------------
+    # STEP 1: CLEAN JD TEXT
+    # --------------------------------------
+
+    jd_text = jd_text.replace("\r", "\n")
+
+    # --------------------------------------
+    # STEP 2: EXTRACT JD REQUIREMENTS
+    # --------------------------------------
+
+    requirements = []
+
+    lines = jd_text.splitlines()
+
+    current_section = ""
+
+    for line in lines:
+
+        clean_line = line.strip()
+
+        if not clean_line:
+            continue
+
+        # Remove common bullet symbols
+        clean_line = clean_line.lstrip(
+            "•●▪◦➢➤-✓✔"
+        ).strip()
+
+        lower_line = clean_line.lower()
+
+        # ----------------------------------
+        # IDENTIFY SECTION HEADINGS
+        # ----------------------------------
+
+        if lower_line in [
+            "job description",
+            "job responsibilities",
+            "responsibilities",
+            "major responsibilities",
+            "duties",
+            "major duties",
+            "requirements",
+            "job requirements",
+            "qualification",
+            "qualifications"
+        ]:
+
+            current_section = lower_line
+            continue
+
+        # ----------------------------------
+        # REMOVE NUMBERING
+        # Example:
+        # 1. Coordinate...
+        # 2) Handle...
+        # 3. Follow up...
+        # ----------------------------------
+
+        clean_line = re.sub(
+            r"^\s*\d+\s*[\.\)\:\-]\s*",
+            "",
+            clean_line
+        ).strip()
+
+        # Remove simple numbering such as:
+        # 1) / 2. / 3-
+        clean_line = re.sub(
+            r"^\s*\d+\s*[\.\)\-]\s*",
+            "",
+            clean_line
+        ).strip()
+
+        if len(clean_line) < 15:
+            continue
+
+        # ----------------------------------
+        # ADD MEANINGFUL JD REQUIREMENT
+        # ----------------------------------
+
+        requirements.append(clean_line)
+
+    # --------------------------------------
+    # STEP 3: REMOVE DUPLICATES
+    # --------------------------------------
+
+    unique_requirements = []
+
+    for requirement in requirements:
+
+        if requirement not in unique_requirements:
+
+            unique_requirements.append(requirement)
+
+    requirements = unique_requirements
+
+    # --------------------------------------
+    # STEP 4: PREPARE CV LINES
+    # --------------------------------------
+
+    cv_lines = []
+
+    for line in cv_text.splitlines():
+
+        clean_line = line.strip()
+
+        if not clean_line:
+            continue
+
+        clean_line = clean_line.lstrip(
+            "•●▪◦➢➤-✓✔"
+        ).strip()
+
+        if len(clean_line) >= 8:
+
+            cv_lines.append(clean_line)
+
+    # --------------------------------------
+    # STEP 5: FALLBACK
+    # If CV has no line breaks
+    # --------------------------------------
+
+    if len(cv_lines) < 3:
+
+        cv_lines = re.split(
+            r"[.;]\s+",
+            cv_text
+        )
+
+        cv_lines = [
+            line.strip()
+            for line in cv_lines
+            if len(line.strip()) >= 8
+        ]
+
+    # --------------------------------------
+    # STEP 6: MATCH EACH JD REQUIREMENT
+    # WITH THE BEST CV EVIDENCE
+    # --------------------------------------
 
     results = []
 
     for requirement in requirements:
 
-        try:
-            jd_embedding = model.encode(
-                requirement,
-                convert_to_tensor=True
-            )
+        best_score = 0.0
+        best_cv_line = ""
 
-            cv_embedding = model.encode(
-                cv_text,
-                convert_to_tensor=True
-            )
+        # ----------------------------------
+        # Compare JD requirement against
+        # each CV line
+        # ----------------------------------
 
-            similarity = util.cos_sim(
-                jd_embedding,
-                cv_embedding
-            ).item()
+        for cv_line in cv_lines:
 
-            score = round(similarity * 100, 1)
+            try:
 
-            if score >= 70:
-                status = "Strong Match"
-                icon = "🟢"
+                jd_embedding = model.encode(
+                    requirement,
+                    convert_to_tensor=True
+                )
 
-            elif score >= 45:
-                status = "Partial Match"
-                icon = "🟡"
+                cv_embedding = model.encode(
+                    cv_line,
+                    convert_to_tensor=True
+                )
 
-            else:
-                status = "Weak Match"
-                icon = "🔴"
+                similarity = util.cos_sim(
+                    jd_embedding,
+                    cv_embedding
+                ).item()
 
-            results.append({
-                "requirement": requirement,
-                "score": score,
-                "status": status,
-                "icon": icon
-            })
+                score = max(
+                    0.0,
+                    min(
+                        100.0,
+                        similarity * 100
+                    )
+                )
 
-        except Exception as e:
+                if score > best_score:
 
-            results.append({
-                "requirement": requirement,
-                "score": 0,
-                "status": "Error",
-                "icon": "⚪"
-            })
+                    best_score = score
+                    best_cv_line = cv_line
+
+            except Exception:
+
+                continue
+
+        # ----------------------------------
+        # MATCH STATUS
+        # ----------------------------------
+
+        if best_score >= 65:
+
+            status = "Strong Match"
+            icon = "🟢"
+
+        elif best_score >= 40:
+
+            status = "Partial Match"
+            icon = "🟡"
+
+        else:
+
+            status = "Weak / Missing"
+            icon = "🔴"
+
+        # ----------------------------------
+        # SAVE RESULT
+        # ----------------------------------
+
+        results.append({
+
+            "requirement": requirement,
+
+            "score": round(
+                best_score,
+                1
+            ),
+
+            "status": status,
+
+            "icon": icon,
+
+            "cv_evidence": best_cv_line
+
+        })
 
     return results
+
 
 # ==========================================
 # DATABASE CONNECTION
@@ -2934,6 +4459,7 @@ elif menu == "📄 CV Bank":
 # ==========================================
 
 elif menu == "🎯 Screening":
+
     st.title("🎯 AI CV Screening")
 
     st.write(
@@ -3205,7 +4731,7 @@ elif menu == "🎯 Screening":
                         )
 
                         # --------------------------------------
-                        # WEIGHTED SCORE
+                        # WEIGHTED AI SCORE
                         # --------------------------------------
 
                         final_score = calculate_weighted_score(
@@ -3219,19 +4745,6 @@ elif menu == "🎯 Screening":
                         education_match = calculate_education_match(
                             job_description,
                             cv_text
-                        )
-
-                        # --------------------------------------
-                        # TASK / RESPONSIBILITY MATCH
-                        # --------------------------------------
-
-                        task_results = calculate_task_matching(
-                            job_description,
-                            cv_text
-                        )
-
-                        task_match = calculate_task_match_percentage(
-                            task_results
                         )
 
                         # --------------------------------------
@@ -3279,7 +4792,7 @@ elif menu == "🎯 Screening":
                         # SCORE + DECISION
                         # --------------------------------------
 
-                        col1, col2, col3, col4 = st.columns(4)
+                        col1, col2, col3 = st.columns(3)
 
                         with col1:
 
@@ -3298,50 +4811,8 @@ elif menu == "🎯 Screening":
                         with col3:
 
                             st.metric(
-                                "Task Match",
-                                f"{task_match:.1f}%"
-                            )
-
-                        with col4:
-
-                            st.metric(
                                 "Recommendation",
                                 recommendation
-                            )
-
-                        # --------------------------------------
-                        # TASK MATCHING DETAILS
-                        # --------------------------------------
-
-                        st.write(
-                            "### 🛠️ JD Task vs Candidate Task"
-                        )
-
-                        if task_results:
-
-                            for item in task_results:
-
-                                st.write(
-                                    f"{item['icon']} **JD Task:** "
-                                    f"{item['jd_task']}"
-                                )
-
-                                st.caption(
-                                    f"CV Task: {item['cv_task']}"
-                                )
-
-                                st.caption(
-                                    f"Match Score: {item['score']:.1f}% "
-                                    f"| {item['status']}"
-                                )
-
-                                st.divider()
-
-                        else:
-
-                            st.info(
-                                "এই CV বা JD থেকে task/responsibility "
-                                "পরিষ্কারভাবে পাওয়া যায়নি।"
                             )
 
                         # --------------------------------------
@@ -3349,7 +4820,7 @@ elif menu == "🎯 Screening":
                         # --------------------------------------
 
                         st.progress(
-                            final_score / 100
+                            min(max(final_score / 100, 0), 1)
                         )
 
                         # --------------------------------------
@@ -3361,27 +4832,27 @@ elif menu == "🎯 Screening":
                         )
 
                         education_score = round(
-                            category_scores["education"] * 15 / 100,
+                            category_scores.get("education", 0) * 15 / 100,
                             2
                         )
 
                         experience_score = round(
-                            category_scores["experience"] * 25 / 100,
+                            category_scores.get("experience", 0) * 25 / 100,
                             2
                         )
 
                         skills_score = round(
-                            category_scores["skills"] * 25 / 100,
+                            category_scores.get("skills", 0) * 25 / 100,
                             2
                         )
 
                         responsibilities_score = round(
-                            category_scores["responsibilities"] * 20 / 100,
+                            category_scores.get("responsibilities", 0) * 20 / 100,
                             2
                         )
 
                         rmg_denim_score = round(
-                            category_scores["rmg_denim"] * 15 / 100,
+                            category_scores.get("rmg_denim", 0) * 15 / 100,
                             2
                         )
 
@@ -3394,7 +4865,7 @@ elif menu == "🎯 Screening":
                             )
 
                             st.write(
-                                f"Match: {category_scores['education']:.1f}% "
+                                f"Match: {category_scores.get('education', 0):.1f}% "
                                 f"| Score: {education_score}/15"
                             )
 
@@ -3403,7 +4874,7 @@ elif menu == "🎯 Screening":
                             )
 
                             st.write(
-                                f"Match: {category_scores['experience']:.1f}% "
+                                f"Match: {category_scores.get('experience', 0):.1f}% "
                                 f"| Score: {experience_score}/25"
                             )
 
@@ -3412,7 +4883,7 @@ elif menu == "🎯 Screening":
                             )
 
                             st.write(
-                                f"Match: {category_scores['skills']:.1f}% "
+                                f"Match: {category_scores.get('skills', 0):.1f}% "
                                 f"| Score: {skills_score}/25"
                             )
 
@@ -3423,7 +4894,7 @@ elif menu == "🎯 Screening":
                             )
 
                             st.write(
-                                f"Match: {category_scores['responsibilities']:.1f}% "
+                                f"Match: {category_scores.get('responsibilities', 0):.1f}% "
                                 f"| Score: {responsibilities_score}/20"
                             )
 
@@ -3432,7 +4903,7 @@ elif menu == "🎯 Screening":
                             )
 
                             st.write(
-                                f"Match: {category_scores['rmg_denim']:.1f}% "
+                                f"Match: {category_scores.get('rmg_denim', 0):.1f}% "
                                 f"| Score: {rmg_denim_score}/15"
                             )
 
@@ -3451,7 +4922,7 @@ elif menu == "🎯 Screening":
                         )
 
                         # --------------------------------------
-                        # AI SCREENING SUMMARY DISPLAY
+                        # AI SCREENING SUMMARY
                         # --------------------------------------
 
                         st.write(
@@ -3540,6 +5011,7 @@ elif menu == "🎯 Screening":
                                 )
 
                         st.divider()
+
 
 # ==========================================
 # INTERVIEWS
