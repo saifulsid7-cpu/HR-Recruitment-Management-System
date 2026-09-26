@@ -1338,9 +1338,20 @@ def analyze_jd_requirements(jd_text, cv_text):
 # DATABASE CONNECTION
 # ==========================================
 
-database_path = r"D:\HR_Recruitment_App\database.db"
+import os
 
-conn = sqlite3.connect(database_path)
+# Use a database file inside the app folder.
+# This works both locally and on Streamlit Cloud.
+database_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "database.db"
+)
+
+conn = sqlite3.connect(
+    database_path,
+    check_same_thread=False
+)
+
 cursor = conn.cursor()
 
 
