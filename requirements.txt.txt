@@ -1,10 +1,10 @@
 streamlit
-pandas
-numpy
 pypdf
 python-docx
+pandas
+numpy
+Pillow
+scikit-learn
 sentence-transformers
 torch
 torchvision
-scikit-learn
-Pillow
